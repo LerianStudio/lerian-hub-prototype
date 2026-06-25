@@ -1,26 +1,58 @@
-@import "tailwindcss";
+/*
+ * Lerian Hub global styles.
+ *
+ * `@lerianstudio/sindarian-ui` ships its own globals.css which already pulls in
+ * Tailwind v4 (`@import 'tailwindcss'`), the Lerian brand palettes, the shadcn
+ * semantic tokens, the `.dark` overrides and the `dark` custom variant. We
+ * import THAT file (do NOT re-import tailwindcss here to avoid duplication),
+ * then add only the font-family theme mappings this app needs.
+ *
+ * Fonts are injected by next/font on <html> as the CSS variables
+ * `--font-inter` (Inter, body) and `--font-jetbrains-mono` (JetBrains Mono).
+ */
+@import "@lerianstudio/sindarian-ui/dist/globals.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * The lib ships its components compiled in `dist/` (JS). Tailwind v4 ignores
+ * node_modules by default, so utilities used inline by the Dropdown/Sheet/etc.
+ * (e.g. `bg-popover`, `bg-background`, `border-border`) were never emitted —
+ * leaving those surfaces transparent. Register the lib as a scan source so
+ * Tailwind generates the classes its components actually use.
+ */
+@source "../node_modules/@lerianstudio/sindarian-ui/dist";
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Body font: the lib already maps --font-sans to --font-inter; keep parity. */
+  --font-sans: var(--font-inter), Inter, ui-sans-serif, system-ui, sans-serif;
+  /* Mono font for IDs / subdomains / version strings. */
+  --font-mono: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace,
+    "SF Mono", monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/*
+ * shadcn base reset: Tailwind v4's preflight defaults every element's
+ * border-color to `gray-200`, which reads as a bright/white border on dark
+ * surfaces. Default it to the themed `--border` token instead so bare `border`
+ * utilities follow light/dark like the rest of the design system.
+ */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop {
+    border-color: hsl(var(--border));
   }
 }
 
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  height: 100%;
+}
+
+body {
+  background: hsl(var(--body-surface));
+  color: hsl(var(--body-text));
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
