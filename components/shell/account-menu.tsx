@@ -12,13 +12,12 @@ import {
 } from "@lerianstudio/sindarian-ui";
 
 import { useAuth } from "@/components/auth/auth-provider";
-import { CURRENT_USER } from "@/lib/apps";
 
 const AVATAR_GRADIENT =
   "linear-gradient(135deg, var(--color-sunglow-400), var(--color-vivid-tangerine-400))";
 
 /** Round gradient avatar with the user's initials. */
-function Avatar({ size = 34 }: { size?: number }) {
+function Avatar({ initials, size = 34 }: { initials: string; size?: number }) {
   return (
     <span
       aria-hidden="true"
@@ -30,7 +29,7 @@ function Avatar({ size = 34 }: { size?: number }) {
         background: AVATAR_GRADIENT,
       }}
     >
-      {CURRENT_USER.initials}
+      {initials}
     </span>
   );
 }
@@ -38,9 +37,13 @@ function Avatar({ size = 34 }: { size?: number }) {
 /**
  * The account avatar in the top bar, opening a dropdown with the SSO identity
  * and a "Sair de todos os apps" (sign out everywhere) action.
+ *
+ * Identity comes from the cookie session via `useAuth()`. The menu lives behind
+ * the auth guard so `session` is normally present; if it is null (e.g. a torn
+ * session mid-logout) we render nothing rather than crash.
  */
 export function AccountMenu() {
-  const { signOut } = useAuth();
+  const { session, signOut } = useAuth();
   const router = useRouter();
 
   function handleLogout() {
@@ -49,23 +52,25 @@ export function AccountMenu() {
     void signOut();
   }
 
+  if (!session) return null;
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        aria-label={`Conta de ${CURRENT_USER.name}`}
+        aria-label={`Conta de ${session.name}`}
         className="rounded-full outline-none ring-2 ring-border transition-shadow hover:ring-shadcn-400 focus-visible:ring-ring"
       >
-        <Avatar />
+        <Avatar initials={session.initials} />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-[280px]">
         <div className="flex items-center gap-3 p-2.5">
-          <Avatar size={42} />
+          <Avatar initials={session.initials} size={42} />
           <div className="min-w-0">
             <div className="text-sm font-semibold text-body-title">
-              {CURRENT_USER.name}
+              {session.name}
             </div>
             <div className="truncate text-xs text-muted-foreground">
-              {CURRENT_USER.email}
+              {session.email}
             </div>
           </div>
         </div>
