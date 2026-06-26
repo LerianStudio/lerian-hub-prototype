@@ -1,90 +1,133 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
-  useSyncExternalStore,
+  useState,
   type ReactNode,
 } from "react";
 
+import type { HubSession } from "@/lib/auth/jwt";
+
 /**
- * Prototype-faithful client-side auth.
+ * Session-backed client auth.
  *
- * The single Hub session is represented by `localStorage.sin_auth === "1"`.
- * In production this would be a real SSO cookie scoped to `.lerian.studio`.
+ * The single Hub session is an httpOnly `hub_token` cookie (invisible to JS),
+ * so the provider learns the identity by fetching GET /api/auth/me on mount.
+ * `proxy.ts` (Next 16's renamed middleware) owns access enforcement —
+ * unauthenticated page requests are 307-redirected server-side — so this
+ * provider is display + actions only, never a gatekeeper.
+ *
+ * Cross-tab logout: the cookie can't be observed via the `storage` event, so we
+ * broadcast a `{ type: "logout" }` message on `BroadcastChannel("hub_auth")`;
+ * every tab resets to anon and routes to `/login` on receipt.
  */
-const STORAGE_KEY = "sin_auth";
+
+/** The session identity exposed to the client — /api/auth/me's payload shape. */
+export type SessionUser = Omit<HubSession, "iat" | "exp">;
+
+const AUTH_CHANNEL = "hub_auth";
 
 interface AuthContextValue {
-  /** `true` / `false` once resolved on the client, `null` while hydrating. */
-  authed: boolean | null;
-  /** Create the single Hub session. */
-  signIn: () => void;
-  /** Clear the session (sign out of all apps). */
-  signOut: () => void;
+  /** The signed-in identity, or `null` while loading / when anonymous. */
+  session: SessionUser | null;
+  /** `true` until GET /api/auth/me resolves. */
+  loading: boolean;
+  /** Sign in (POST /api/auth/login) then navigate to `returnTo ?? "/"`. */
+  signIn: (returnTo?: string) => Promise<void>;
+  /** Sign out (POST /api/auth/logout), broadcast logout, navigate to /login. */
+  signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function readAuth(): boolean {
+/** Feature-detected BroadcastChannel — undefined in SSR/jsdom-less envs. */
+function openAuthChannel(): BroadcastChannel | null {
+  if (typeof BroadcastChannel === "undefined") return null;
   try {
-    return localStorage.getItem(STORAGE_KEY) === "1";
+    return new BroadcastChannel(AUTH_CHANNEL);
   } catch {
-    return false;
+    return null;
   }
 }
 
-/**
- * External store backing the auth state. Subscribes to the `storage` event (so
- * other tabs stay in sync) and to a local listener set (so this tab's own
- * sign-in/out updates re-render). The server snapshot is `null` (unknown).
- */
-function subscribe(callback: () => void): () => void {
-  window.addEventListener("storage", callback);
-  authListeners.add(callback);
-  return () => {
-    window.removeEventListener("storage", callback);
-    authListeners.delete(callback);
-  };
-}
-
-const authListeners = new Set<() => void>();
-function emitAuthChange() {
-  authListeners.forEach((listener) => listener());
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // `null` server snapshot avoids hydration mismatch; the client snapshot reads
-  // localStorage. The boolean is compared by value, so getSnapshot is stable.
-  const authed = useSyncExternalStore<boolean | null>(
-    subscribe,
-    readAuth,
-    () => null,
+  const router = useRouter();
+  const [session, setSession] = useState<SessionUser | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Resolve the session once on mount; abortable so an unmount mid-flight
+  // doesn't set state on a torn-down component.
+  useEffect(() => {
+    const controller = new AbortController();
+
+    (async () => {
+      try {
+        const res = await fetch("/api/auth/me", { signal: controller.signal });
+        if (controller.signal.aborted) return;
+        if (res.ok) {
+          setSession((await res.json()) as SessionUser);
+        } else {
+          setSession(null);
+        }
+      } catch {
+        // Aborted or network error → treat as anonymous.
+        if (!controller.signal.aborted) setSession(null);
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    })();
+
+    return () => controller.abort();
+  }, []);
+
+  // Cross-tab logout: another tab signed out → drop our session and bounce.
+  useEffect(() => {
+    const channel = openAuthChannel();
+    if (!channel) return;
+
+    channel.onmessage = (event: MessageEvent) => {
+      if (
+        event.data &&
+        typeof event.data === "object" &&
+        (event.data as { type?: unknown }).type === "logout"
+      ) {
+        setSession(null);
+        router.replace("/login");
+      }
+    };
+
+    return () => channel.close();
+  }, [router]);
+
+  const signIn = useCallback(
+    async (returnTo?: string) => {
+      await fetch("/api/auth/login", { method: "POST" });
+      router.replace(returnTo ?? "/");
+    },
+    [router],
   );
 
-  const signIn = useCallback(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, "1");
-    } catch {
-      // localStorage may be unavailable (private mode).
-    }
-    emitAuthChange();
-  }, []);
+  const signOut = useCallback(async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    setSession(null);
 
-  const signOut = useCallback(() => {
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // ignore
+    const channel = openAuthChannel();
+    if (channel) {
+      channel.postMessage({ type: "logout" });
+      channel.close();
     }
-    emitAuthChange();
-  }, []);
+
+    router.replace("/login");
+  }, [router]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ authed, signIn, signOut }),
-    [authed, signIn, signOut],
+    () => ({ session, loading, signIn, signOut }),
+    [session, loading, signIn, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

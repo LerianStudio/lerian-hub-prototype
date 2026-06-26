@@ -1,26 +1,20 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useEffect, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 
 /**
- * Wraps authed routes. If the single Hub session is absent, it bounces to
- * `/login`. While auth is still resolving (`null`) or when signed out, it
- * renders nothing to avoid flashing protected content.
+ * Thin loading-gate for authed routes. `proxy.ts` (Next 16's renamed
+ * middleware) enforces access server-side — unauthenticated page requests are
+ * 307-redirected to `/login` before this ever renders — so the guard no longer
+ * redirects. It only short-circuits rendering while GET /api/auth/me is still
+ * resolving, to avoid flashing chrome before the identity is known.
  */
 export function RouteGuard({ children }: { children: ReactNode }) {
-  const { authed } = useAuth();
-  const router = useRouter();
+  const { loading } = useAuth();
 
-  useEffect(() => {
-    if (authed === false) {
-      router.replace("/login");
-    }
-  }, [authed, router]);
-
-  if (authed !== true) {
+  if (loading) {
     return null;
   }
 

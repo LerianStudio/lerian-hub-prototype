@@ -44,8 +44,9 @@ export function AccountMenu() {
   const router = useRouter();
 
   function handleLogout() {
-    signOut();
-    router.replace("/login");
+    // signOut POSTs /api/auth/logout, broadcasts cross-tab logout, then routes
+    // to /login itself (provider owns navigation now).
+    void signOut();
   }
 
   return (

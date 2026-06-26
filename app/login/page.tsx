@@ -1,7 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useEffect } from "react";
 import { Lock } from "lucide-react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -13,19 +11,13 @@ import { APPS } from "@/lib/apps";
 // the wrapping flex centers a partial last row for any app count.
 
 export default function LoginPage() {
-  const { authed, signIn } = useAuth();
-  const router = useRouter();
+  const { signIn } = useAuth();
 
-  // Already signed in → skip the login screen.
-  useEffect(() => {
-    if (authed === true) {
-      router.replace("/");
-    }
-  }, [authed, router]);
-
+  // signIn POSTs /api/auth/login then navigates (returnTo ?? "/") itself.
+  // The proxy already keeps already-signed-in users off this page server-side.
+  // returnTo wiring is polished in task 1.3.2.
   function handleSignIn() {
-    signIn();
-    router.push("/");
+    void signIn();
   }
 
   return (
