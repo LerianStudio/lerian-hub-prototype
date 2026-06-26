@@ -58,7 +58,15 @@ describe("POST /api/auth/login (mock mode)", () => {
     const res = await POST();
 
     expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toEqual({ ok: true });
+    // Login returns the session identity claims (same shape as GET
+    // /api/auth/me) so the client provider can set session without a second
+    // round-trip (BUG 1 fix). Timing claims are not part of the identity.
+    const loginBody = await res.json();
+    expect(loginBody.email).toBe(MOCK_USER.email);
+    expect(loginBody.name).toBe(MOCK_USER.name);
+    expect(loginBody.initials).toBe(MOCK_USER.initials);
+    expect("iat" in loginBody).toBe(false);
+    expect("exp" in loginBody).toBe(false);
 
     // The session cookie was set with a non-empty signed token.
     const call = setCalls.find((c) => c.name === SESSION_COOKIE);

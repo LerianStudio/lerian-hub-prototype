@@ -104,7 +104,7 @@ describe("AuthProvider — signIn", () => {
   it("routes to '/' when signIn is called without a returnTo", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ error: "Unauthorized" }, 401))
-      .mockResolvedValueOnce(jsonResponse({ ok: true }, 200));
+      .mockResolvedValueOnce(jsonResponse(IDENTITY, 200));
 
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -114,6 +114,54 @@ describe("AuthProvider — signIn", () => {
     });
 
     expect(replace).toHaveBeenCalledWith("/");
+  });
+
+  // BUG 1 regression: after a successful login the account menu would not show
+  // until a HARD refresh, because the provider (mounted high in the layout)
+  // never re-ran its mount fetch on the client-side router.replace("/") and so
+  // `session` stayed null. The mount fetch alone was the only thing that set
+  // session — exactly the boundary the prior tests mocked past. This asserts
+  // the login flow ITSELF populates session, with NO remount and NO reload.
+  it("populates session from the login flow without a remount or reload", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ error: "Unauthorized" }, 401)) // me (anon at mount)
+      .mockResolvedValueOnce(jsonResponse(IDENTITY, 200)); // login returns identity
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // Pre-condition: anonymous after the mount fetch.
+    expect(result.current.session).toBeNull();
+
+    await act(async () => {
+      await result.current.signIn();
+    });
+
+    // The SAME hook instance (no remount) now exposes the identity, so a
+    // consumer like AccountMenu (`if (!session) return null`) renders
+    // immediately after login.
+    expect(result.current.session).toEqual(IDENTITY);
+    // And navigation still happens.
+    expect(replace).toHaveBeenCalledWith("/");
+  });
+
+  it("navigates AFTER session is set so the destination renders authed", async () => {
+    // Order matters: if we navigated before setSession, a server-rendered
+    // destination could still paint anon chrome. Assert login resolved the
+    // session by the time replace was called (single act() flush).
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ error: "Unauthorized" }, 401))
+      .mockResolvedValueOnce(jsonResponse(IDENTITY, 200));
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.signIn("/tickets");
+    });
+
+    expect(result.current.session).toEqual(IDENTITY);
+    expect(replace).toHaveBeenCalledWith("/tickets");
   });
 });
 

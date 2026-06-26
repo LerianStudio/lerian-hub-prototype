@@ -169,8 +169,15 @@ export function appById(id: string): AppDef {
 
 /**
  * Illustrative signed-in identity (single SSO account across all apps).
- * Re-exported from the auth layer so the seed has a single source — see
- * `lib/auth/mock-user.ts`. Existing UI imports `CURRENT_USER` from here.
+ * Re-exported from the LEAF seed module so the seed has a single source — see
+ * `lib/auth/mock-user-seed.ts`. Existing UI imports `CURRENT_USER` from here.
+ *
+ * Importing the seed from the leaf (NOT from `lib/auth/mock-user.ts`, which
+ * references the auth runtime) is load-bearing: the consumers below are
+ * "use client" components, so a re-export routed through the auth runtime
+ * (`jwt.ts` → `jose` + `config.ts`/`process.env`) dragged that server-only code
+ * into the client bundle and left `CURRENT_USER` `undefined` under Turbopack's
+ * warm chunk-init order (BUG 2 — "CURRENT_USER is not defined" on a normal F5).
  *
  * TODO(phase-2): the UI consumers of CURRENT_USER — `greeting.tsx`,
  * `config/page.tsx`, `app-subtitle.tsx`, `sindarian-assistant.tsx` — must move
@@ -179,4 +186,4 @@ export function appById(id: string): AppDef {
  * Those fields are NOT in the session token yet, so the seed re-export stays
  * until the real identity provider carries them.
  */
-export { MOCK_USER as CURRENT_USER } from "@/lib/auth/mock-user";
+export { MOCK_USER as CURRENT_USER } from "@/lib/auth/mock-user-seed";

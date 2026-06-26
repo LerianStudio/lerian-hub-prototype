@@ -110,7 +110,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(
     async (returnTo?: string) => {
-      await fetch("/api/auth/login", { method: "POST" });
+      // POST /api/auth/login sets the httpOnly cookie AND returns the identity
+      // claims. We `setSession` from that response BEFORE navigating, so the
+      // account menu renders immediately — the provider is mounted high in the
+      // layout and does NOT remount on the client-side router.replace, so the
+      // mount fetch would never re-run to pick up the new session (BUG 1).
+      const res = await fetch("/api/auth/login", { method: "POST" });
+      if (res.ok) {
+        setSession((await res.json()) as SessionUser);
+      }
       router.replace(returnTo ?? "/");
     },
     [router],
