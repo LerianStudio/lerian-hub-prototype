@@ -1,0 +1,52 @@
+/**
+ * Tests for the session cookie helpers — operations-center-equivalent
+ * attributes for the `hub_token` cookie.
+ *
+ * `sessionCookieOptions()` / `clearCookieOptions()` return a plain options
+ * object that route handlers (Epic 1.2) apply to the cookie API. They mirror
+ * oc_token: httpOnly, sameSite "lax", path "/", secure outside development,
+ * maxAge from the configured TTL. `clearCookieOptions()` is the same shape with
+ * maxAge 0 to expire the cookie.
+ */
+import { describe, it, expect } from "vitest";
+import {
+  SESSION_COOKIE,
+  sessionCookieOptions,
+  clearCookieOptions,
+} from "@/lib/auth/cookies";
+import { authConfig } from "@/lib/auth/config";
+
+describe("SESSION_COOKIE", () => {
+  it("is the hub_token cookie name", () => {
+    expect(SESSION_COOKIE).toBe("hub_token");
+  });
+});
+
+describe("sessionCookieOptions", () => {
+  it("emits operations-center-equivalent attributes", () => {
+    const opts = sessionCookieOptions();
+
+    expect(opts.httpOnly).toBe(true);
+    expect(opts.sameSite).toBe("lax");
+    expect(opts.path).toBe("/");
+    expect(opts.maxAge).toBe(authConfig.sessionTtlMinutes * 60);
+    expect(opts.domain).toBe(authConfig.cookieDomain);
+  });
+
+  it("sets secure based on NODE_ENV (insecure only in development)", () => {
+    const opts = sessionCookieOptions();
+    expect(opts.secure).toBe(process.env.NODE_ENV !== "development");
+  });
+});
+
+describe("clearCookieOptions", () => {
+  it("matches the session attributes but with maxAge 0", () => {
+    const opts = clearCookieOptions();
+
+    expect(opts.maxAge).toBe(0);
+    expect(opts.httpOnly).toBe(true);
+    expect(opts.sameSite).toBe("lax");
+    expect(opts.path).toBe("/");
+    expect(opts.domain).toBe(authConfig.cookieDomain);
+  });
+});
