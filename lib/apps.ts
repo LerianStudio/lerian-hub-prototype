@@ -167,17 +167,9 @@ export function appById(id: string): AppDef {
   return APPS.find((app) => app.id === id) ?? HOME_APP;
 }
 
-/** Illustrative signed-in identity (single SSO account across all apps). */
-export const CURRENT_USER = {
-  name: "Daniel Antunes",
-  email: "daniel.antunes@lerian.studio",
-  initials: "DA",
-  /** Profile fields used to pre-fill the account settings form. */
-  firstName: "Daniel",
-  lastName: "Antunes",
-  phone: "+55 11 98888-1234",
-  role: "Engenheiro de Software",
-  company: "Lerian",
-  department: "Plataforma",
-  timezone: "America/Sao_Paulo",
-} as const;
+/**
+ * Illustrative signed-in identity (single SSO account across all apps).
+ * Re-exported from the auth layer so the seed has a single source — see
+ * `lib/auth/mock-user.ts`. Existing UI imports `CURRENT_USER` from here.
+ */
+export { MOCK_USER as CURRENT_USER } from "@/lib/auth/mock-user";
