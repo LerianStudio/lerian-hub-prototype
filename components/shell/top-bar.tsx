@@ -2,11 +2,45 @@
 
 import Link from "next/link";
 import { Bell } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { AccountMenu } from "@/components/shell/account-menu";
 import { LerianLogo } from "@/components/shell/lerian-logo";
 import { useSindarian } from "@/components/shell/sindarian-context";
+
+/**
+ * Tracks whether the header should be hidden based on scroll direction.
+ *
+ * Scrolling *down* past a small threshold hides it; any scroll *up* (or being
+ * near the top) reveals it again. The returned flag only drives a transform
+ * that's scoped to mobile in the markup — on `sm+` the bar stays put.
+ */
+function useHideOnScrollDown() {
+  const [hidden, setHidden] = useState(false);
+  const lastY = useRef(0);
+
+  useEffect(() => {
+    lastY.current = window.scrollY;
+
+    function onScroll() {
+      const y = window.scrollY;
+      const delta = y - lastY.current;
+
+      // Ignore jitter; always reveal near the top of the page.
+      if (Math.abs(delta) > 6) {
+        if (y < 64 || delta < 0) setHidden(false);
+        else if (delta > 0) setHidden(true);
+        lastY.current = y;
+      }
+    }
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  return hidden;
+}
 
 /**
  * HG3 — the slim, persistent-search header (Google "search at the top" idiom).
@@ -31,9 +65,14 @@ import { useSindarian } from "@/components/shell/sindarian-context";
  */
 export function TopBar() {
   const { setOpen } = useSindarian();
+  const hidden = useHideOnScrollDown();
 
   return (
-    <header className="sticky top-0 z-50 flex flex-wrap items-center gap-x-3 gap-y-2 border-b bg-container-surface px-4 py-2 sm:flex-nowrap sm:px-5">
+    <header
+      className={`sticky top-0 z-50 flex flex-wrap items-center gap-x-3 gap-y-2 border-b bg-container-surface px-4 py-2 transition-transform duration-300 sm:flex-nowrap sm:translate-y-0 sm:px-5 ${
+        hidden ? "-translate-y-full" : "translate-y-0"
+      }`}
+    >
       {/* Left: Lerian brand mark. */}
       <div className="flex shrink-0 items-center gap-2">
         <Link
